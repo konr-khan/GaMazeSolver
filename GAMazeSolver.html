@@ -172,10 +172,10 @@
                 for (const move of potentialMoves) {
                     // Check if the potential NEXT CELL is within the carvable bounds (1 to SIZE-2 inclusive)
                     // AND is not already visited
-                    if (move.nextR > 0 && move.nextR < ROWS - 1 &&
-                        move.nextC > 0 && move.nextC < COLS - 1 &&
+                    if (move.nextR >= 1 && move.nextR < ROWS - 1 &&
+                        move.nextC >= 1 && move.nextC < COLS - 1 &&
                         !visited[move.nextR][move.nextC])
-                    {
+ {
                         const wallR = move.wallR;
                         const wallC = move.wallC;
                         neighbors.push({ r: move.nextR, c: move.nextC, wallR: wallR, wallC: wallC });
