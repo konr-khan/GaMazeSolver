@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Maze Solver (20x20 Grid)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Styles are unchanged */
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        canvas { display: block; margin: 0 auto; background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 0.375rem; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); cursor: pointer; }
+        canvas.running { cursor: not-allowed; }
+        .control-panel label, .algo-select label, .viz-options label { display: inline-block; margin-bottom: 0.25rem; font-weight: 500; color: #4b5563; vertical-align: middle; }
+        .ga-control > label, .aco-control > label { display: block; margin-bottom: 0.25rem; } /* Algo specific labels */
+        .algo-select span, .viz-options span { margin-right: 1rem; color: #374151; }
+        .algo-select input[type="radio"], .viz-options input[type="checkbox"] { margin-left: 0.25rem; accent-color: #2563eb; vertical-align: middle; }
+        .control-panel input[type="number"], .control-panel input[type="range"] { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; margin-bottom: 0.75rem; }
+        .ga-control.disabled, .aco-control.disabled { opacity: 0.5; pointer-events: none; }
+        .ga-control.disabled label, .ga-control.disabled input, .ga-control.disabled span,
+        .aco-control.disabled label, .aco-control.disabled input, .aco-control.disabled span { color: #9ca3af; }
+        .action-buttons button { padding: 0.6rem 1.2rem; border-radius: 0.375rem; font-weight: 600; color: white; cursor: pointer; transition: background-color 0.2s ease; margin: 0 0.25rem; }
+        .action-buttons button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-start { background-color: #2563eb; } .btn-start:hover:not(:disabled) { background-color: #1d4ed8; }
+        .btn-reset { background-color: #dc2626; } .btn-reset:hover:not(:disabled) { background-color: #b91c1c; }
+        .btn-generate { background-color: #059669; } .btn-generate:hover:not(:disabled) { background-color: #047857; }
+        .status-box { background-color: #e5e7eb; padding: 0.75rem; border-radius: 0.375rem; margin-top: 1rem; font-size: 0.875rem; color: #374151; }
+        .status-box p { margin-bottom: 0.25rem; margin-right: 1em; }
+        .status-box div { display: flex; flex-wrap: wrap; }
+        .status-box span { font-weight: 600; color: #1f2937; margin-left: 0.3em; }
+        #messageBox { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: #4ade80; color: #14532d; padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); z-index: 1000; display: none; font-weight: 500; }
+        .instructions { font-size: 0.875rem; color: #4b5563; text-align: center; margin-bottom: 1rem; background-color: #e0f2fe; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid #bae6fd; }
+         #speedControlContainer { display: none; margin-top: 0.5rem; }
+         #speedControlContainer label { display: block; text-align: center; margin-bottom: 0.25rem; }
+         #speedSlider { width: 80%; margin: 0 auto; display: block; }
+         .ga-control, .aco-control { display: none; }
+         .ga-control.active, .aco-control.active { display: block; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-4">Interactive Maze Solver (20x20)</h1>
+        <p class="instructions">Draw walls or Generate a maze (20x20 Grid). Select an algorithm & visualization options, then Start. (GA/ACO visualization may impact performance).</p>
+        <canvas id="mazeCanvas" width="520" height="520"></canvas>
+        <div id="messageBox">Solution Found!</div>
+        <div class="algo-select mt-6 mb-2 text-center">
+            <label class="mb-2 font-semibold text-gray-700 block">Select Algorithm:</label>
+            <div>
+                <span><label for="algoBFS">BFS</label><input type="radio" id="algoBFS" name="algorithm" value="BFS" checked></span>
+                <span><label for="algoDFS">DFS</label><input type="radio" id="algoDFS" name="algorithm" value="DFS"></span>
+                <span><label for="algoAStar">A*</label><input type="radio" id="algoAStar" name="algorithm" value="AStar"></span>
+                <span><label for="algoACO">ACO</label><input type="radio" id="algoACO" name="algorithm" value="ACO"></span>
+                <span><label for="algoGA">GA</label><input type="radio" id="algoGA" name="algorithm" value="GA"></span>
+                <span><label for="algoCompare">Compare BFS/DFS</label><input type="radio" id="algoCompare" name="algorithm" value="Compare"></span>
+            </div>
+        </div>
+        <div class="viz-options mt-2 mb-4 text-center">
+             <span><label for="visualizeCheckbox">Visualize Search / Process</label><input type="checkbox" id="visualizeCheckbox"></span>
+             <div id="speedControlContainer">
+                 <label for="speedSlider">Animation Speed (ms/step or ms/iter): <span id="speedValue">50</span></label>
+                 <input type="range" id="speedSlider" min="1" max="500" value="50">
+             </div>
+        </div>
+        <div class="control-panel grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 ga-control" id="gaControlsContainer">
+             <div><label for="populationSize">Population Size (<span id="popSizeCapInfo">No Cap</span>):</label><input type="number" id="populationSize" value="150" min="10" step="10"></div>
+             <div><label for="mutationRate">Mutation Rate (%):</label><input type="range" id="mutationRate" value="2" min="0" max="100" step="1"><span id="mutationRateValue" class="text-sm text-gray-600 block mt-1">2%</span></div>
+             <div><label for="maxGenerations">Max Generations:</label><input type="number" id="maxGenerations" value="500" min="10" step="10"></div>
+        </div>
+        <div class="control-panel grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 mt-2 aco-control" id="acoControlsContainer">
+              <div><label for="numAnts">Number of Ants:</label><input type="number" id="numAnts" value="20" min="1" step="1"></div>
+              <div><label for="acoIterations">Iterations:</label><input type="number" id="acoIterations" value="100" min="1" step="5"></div>
+              <div><label for="pheromoneEvaporation">Evaporation (rho):</label><input type="range" id="pheromoneEvaporation" min="0.01" max="1.0" step="0.01" value="0.1"><span id="pheromoneEvaporationValue" class="text-sm text-gray-600 block mt-1">0.10</span></div>
+              <div><label for="pheromoneAlpha">Pheromone Influence (alpha):</label><input type="range" id="pheromoneAlpha" min="0" max="5" step="0.1" value="1"><span id="pheromoneAlphaValue" class="text-sm text-gray-600 block mt-1">1.0</span></div>
+              <div><label for="heuristicBeta">Heuristic Influence (beta):</label><input type="range" id="heuristicBeta" min="0" max="5" step="0.1" value="2"><span id="heuristicBetaValue" class="text-sm text-gray-600 block mt-1">2.0</span></div>
+              <div><label for="pheromoneDeposit">Deposit Amount (Q):</label><input type="number" id="pheromoneDeposit" value="100" min="1" step="10"></div>
+        </div>
+        <div class="action-buttons flex justify-center mt-4">
+              <button id="startButton" class="btn-start">Start Algorithm</button>
+              <button id="generateButton" class="btn-generate">Generate Random Maze</button>
+              <button id="resetButton" class="btn-reset">Reset to Empty</button>
+        </div>
+        <div id="statusBox" class="status-box">
+              <div class="flex flex-wrap justify-center md:justify-start">
+                  <p>Algorithm:<span id="activeAlgo">Breadth-First Search</span></p>
+                  <p>Status:<span id="statusText">Idle - Draw or Generate Maze!</span></p>
+                  <p class="ga-status-item aco-status-item">Iteration/Gen:<span id="iterationCount">N/A</span></p>
+                  <p class="ga-status-item">Best Fitness:<span id="bestFitness">N/A</span></p>
+                  <p>Path Length:<span id="pathLength">N/A</span></p>
+                  <p>Cells Explored:<span id="cellsExplored">N/A</span></p>
+              </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('mazeCanvas'); const ctx = canvas.getContext('2d'); const startButton = document.getElementById('startButton'); const resetButton = document.getElementById('resetButton'); const generateButton = document.getElementById('generateButton');
+        const populationSizeInput = document.getElementById('populationSize'); const popSizeCapInfoSpan = document.getElementById('popSizeCapInfo'); const mutationRateInput = document.getElementById('mutationRate'); const mutationRateValueSpan = document.getElementById('mutationRateValue'); const maxGenerationsInput = document.getElementById('maxGenerations'); const gaControlsContainer = document.getElementById('gaControlsContainer');
+        const numAntsInput = document.getElementById('numAnts'); const acoIterationsInput = document.getElementById('acoIterations'); const pheromoneEvaporationInput = document.getElementById('pheromoneEvaporation'); const pheromoneEvaporationValueSpan = document.getElementById('pheromoneEvaporationValue'); const pheromoneAlphaInput = document.getElementById('pheromoneAlpha'); const pheromoneAlphaValueSpan = document.getElementById('pheromoneAlphaValue'); const heuristicBetaInput = document.getElementById('heuristicBeta'); const heuristicBetaValueSpan = document.getElementById('heuristicBetaValue'); const pheromoneDepositInput = document.getElementById('pheromoneDeposit'); const acoControlsContainer = document.getElementById('acoControlsContainer');
+        const statusBox = document.getElementById('statusBox'); const activeAlgoSpan = document.getElementById('activeAlgo'); const statusTextSpan = document.getElementById('statusText'); const iterationCountSpan = document.getElementById('iterationCount');
+        const bestFitnessSpan = document.getElementById('bestFitness'); const pathLengthSpan = document.getElementById('pathLength'); const cellsExploredSpan = document.getElementById('cellsExplored'); const messageBox = document.getElementById('messageBox'); const algoRadios = document.querySelectorAll('input[name="algorithm"]'); const gaStatusItems = statusBox.querySelectorAll('.ga-status-item'); const acoStatusItems = statusBox.querySelectorAll('.aco-status-item'); const visualizeCheckbox = document.getElementById('visualizeCheckbox'); const speedControlContainer = document.getElementById('speedControlContainer'); const speedSlider = document.getElementById('speedSlider'); const speedValueSpan = document.getElementById('speedValue');
+
+        // --- Maze Configuration & State ---
+        const GRID_SIZE = 20; const ROWS = GRID_SIZE; const COLS = GRID_SIZE;
+        const START_ROW = 1; const START_COL = 1; const END_ROW = 18; const END_COL = 18;
+        const canvasWidth = 520; const canvasHeight = 520; canvas.width = canvasWidth; canvas.height = canvasHeight;
+        const CELL_SIZE = Math.min(canvas.width / COLS, canvas.height / ROWS);
+        let userMazeGrid = [];
+        let startCoords = { r: START_ROW, c: START_COL };
+        let endCoords = { r: END_ROW, c: END_COL };
+
+        // --- Algorithm State ---
+        let selectedAlgorithm = 'BFS'; let isAnimating = false; let animationTimerId = null; let animationDelay = parseInt(speedSlider.value); let gaRunning = false; let gaAnimationFrameId = null; const MAX_VISUAL_POP_SIZE = 100; let acoRunning = false;
+
+        // --- GA State & Parameters ---
+        let population = []; let generation = 0; let bestIndividual = null; let POPULATION_SIZE = parseInt(populationSizeInput.value); let MUTATION_RATE = parseFloat(mutationRateInput.value) / 100.0; let MAX_GENERATIONS = parseInt(maxGenerationsInput.value);
+        const PATH_LENGTH = Math.max(100, Math.floor(ROWS * COLS / 2));
+        const MOVES = ['N', 'S', 'E', 'W'];
+
+        // --- ACO State & Parameters ---
+        let pheromoneGrid = []; let acoIteration = 0; let acoBestPath = null; let acoBestPathLength = Infinity;
+        let NUM_ANTS = parseInt(numAntsInput.value); let ACO_ITERATIONS = parseInt(acoIterationsInput.value); let RHO = parseFloat(pheromoneEvaporationInput.value); let ALPHA = parseFloat(pheromoneAlphaInput.value); let BETA = parseFloat(heuristicBetaInput.value); let Q = parseFloat(pheromoneDepositInput.value);
+        const INITIAL_PHEROMONE = 0.1; const HEURISTIC_EPSILON = 0.0001;
+
+        // --- Colors ---
+        const WALL_COLOR = '#374151'; const PATH_COLOR = '#ffffff'; const START_COLOR = '#10b981'; const END_COLOR = '#ef4444'; const GRID_LINE_COLOR = '#d1d5db'; const BFS_VISITED_COLOR = 'rgba(59, 130, 246, 0.3)'; const DFS_VISITED_COLOR = 'rgba(16, 185, 129, 0.3)'; const ASTAR_VISITED_COLOR = 'rgba(250, 204, 21, 0.3)'; const BFS_PATH_COLOR = '#2563eb'; const DFS_PATH_COLOR = '#7c3aed'; const GA_PATH_COLOR = '#ef4444'; const ASTAR_PATH_COLOR = '#f59e0b'; const COMPARE_BFS_COLOR = '#2563eb'; const COMPARE_DFS_COLOR = '#7c3aed'; const GA_POPULATION_PATH_COLOR = 'rgba(107, 114, 128, 0.08)'; const ACO_PHEROMONE_COLOR = 'rgba(22, 163, 74, P_ALPHA)'; const ACO_BEST_PATH_COLOR = '#16a34a';
+
+        // --- Helper Functions ---
+        function initializeEmptyMazeGrid() { userMazeGrid = []; for (let r = 0; r < ROWS; r++) { userMazeGrid[r] = []; for (let c = 0; c < COLS; c++) { if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) userMazeGrid[r][c] = 1; else if (r === START_ROW && c === START_COL) userMazeGrid[r][c] = 2; else if (r === END_ROW && c === END_COL) userMazeGrid[r][c] = 3; else userMazeGrid[r][c] = 0; } } startCoords = { r: START_ROW, c: START_COL }; endCoords = { r: END_ROW, c: END_COL }; }
+        function initializeWalledMazeGrid() { userMazeGrid = []; for (let r = 0; r < ROWS; r++) { userMazeGrid[r] = Array(COLS).fill(1); } startCoords = { r: START_ROW, c: START_COL }; endCoords = { r: END_ROW, c: END_COL }; }
+        function drawBaseMaze() { ctx.clearRect(0, 0, canvas.width, canvas.height); for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { const cellType = userMazeGrid[r]?.[c]; switch (cellType) { case 1: ctx.fillStyle = WALL_COLOR; break; case 2: ctx.fillStyle = START_COLOR; break; case 3: ctx.fillStyle = END_COLOR; break; case 0: ctx.fillStyle = PATH_COLOR; break; default: ctx.fillStyle = PATH_COLOR; break; } ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE); ctx.strokeStyle = GRID_LINE_COLOR; ctx.lineWidth = 1; ctx.strokeRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE); } } }
+        function drawVisitedCell(r, c, color) { if ((r === startCoords.r && c === startCoords.c) || (r === endCoords.r && c === endCoords.c)) { return; } ctx.fillStyle = color; const offset = 1; const size = CELL_SIZE - 2 * offset; ctx.fillRect(c * CELL_SIZE + offset, r * CELL_SIZE + offset, size, size); }
+        function drawSolvedPath(pathCoords, color = BFS_PATH_COLOR, lineWidth = 3) { if (!pathCoords || pathCoords.length < 2) return; ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, Math.min(lineWidth, CELL_SIZE / 4)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(pathCoords[0].c * CELL_SIZE + CELL_SIZE / 2, pathCoords[0].r * CELL_SIZE + CELL_SIZE / 2); for (let i = 1; i < pathCoords.length; i++) { ctx.lineTo(pathCoords[i].c * CELL_SIZE + CELL_SIZE / 2, pathCoords[i].r * CELL_SIZE + CELL_SIZE / 2); } ctx.stroke(); }
+        function drawGAPath(pathMoves, color = GA_PATH_COLOR, lineWidth = 3, isBestPath = false) { if (!startCoords) return; if (isBestPath && (!pathMoves || pathMoves.length === 0)) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(startCoords.c * CELL_SIZE + CELL_SIZE / 2, startCoords.r * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 5, 0, 2 * Math.PI); ctx.fill(); return; } if (!pathMoves || pathMoves.length === 0) return; ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, Math.min(lineWidth, CELL_SIZE / 4)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(startCoords.c * CELL_SIZE + CELL_SIZE / 2, startCoords.r * CELL_SIZE + CELL_SIZE / 2); let currentR = startCoords.r; let currentC = startCoords.c; let pathSegmentCount = 0; for (const move of pathMoves) { let nextR = currentR; let nextC = currentC; switch (move) { case 'N': nextR--; break; case 'S': nextR++; break; case 'W': nextC--; break; case 'E': nextC++; break; } if (nextR < 0 || nextR >= ROWS || nextC < 0 || nextC >= COLS || userMazeGrid[nextR]?.[nextC] === 1) { break; } ctx.lineTo(nextC * CELL_SIZE + CELL_SIZE / 2, nextR * CELL_SIZE + CELL_SIZE / 2); currentR = nextR; currentC = nextC; pathSegmentCount++; if (currentR === endCoords.r && currentC === endCoords.c) { break; } } if (pathSegmentCount > 0) { ctx.stroke(); } }
+        function showMessage(text, isError = false) { messageBox.textContent = text; messageBox.style.backgroundColor = isError ? '#fca5a5' : '#4ade80'; messageBox.style.color = isError ? '#7f1d1d' : '#14532d'; messageBox.style.display = 'block'; setTimeout(() => { messageBox.style.display = 'none'; }, isError ? 5000 : 3000); }
+        function updateStatus(algo, statusText, iter = null, fitness = null, pathLen = null, cellsExplored = null) { const algoNameMap = { 'GA': 'Genetic Algorithm', 'BFS': 'Breadth-First Search', 'DFS': 'Depth-First Search', 'AStar': 'A* Search', 'ACO': 'Ant Colony Opt.', 'Compare': 'Comparison' }; activeAlgoSpan.textContent = algoNameMap[algo] || algo; statusTextSpan.textContent = statusText; const isGA = algo === 'GA'; const isACO = algo === 'ACO'; gaStatusItems.forEach(p => p.style.display = isGA ? 'inline-block' : 'none'); acoStatusItems.forEach(p => p.style.display = (isGA || isACO) ? 'inline-block' : 'none'); if(isGA || isACO) iterationCountSpan.textContent = iter ?? 'N/A'; else iterationCountSpan.parentElement.style.display = 'none'; if(isGA) bestFitnessSpan.textContent = fitness === null || fitness === undefined ? 'N/A' : fitness.toFixed(4); pathLengthSpan.textContent = pathLen === null || pathLen === undefined ? 'N/A' : pathLen; cellsExploredSpan.textContent = cellsExplored === null || cellsExplored === undefined ? 'N/A' : cellsExplored; const cellsExploredP = statusBox.querySelector('p:last-child'); if (cellsExploredP) cellsExploredP.style.display = (isGA || isACO || algo === 'Compare') ? 'inline-block' : 'none'; }
+        function toggleAlgoControls() { gaControlsContainer.style.display = selectedAlgorithm === 'GA' ? 'grid' : 'none'; acoControlsContainer.style.display = selectedAlgorithm === 'ACO' ? 'grid' : 'none'; }
+        function enableActionButtons(enable) { startButton.disabled = !enable; generateButton.disabled = !enable; resetButton.disabled = !enable; canvas.classList.toggle('running', !enable); canvas.style.pointerEvents = enable ? 'auto' : 'none'; }
+        function updatePopulationCap() { const isGA = selectedAlgorithm === 'GA'; const visualize = visualizeCheckbox.checked; if (isGA && visualize) { populationSizeInput.setAttribute('max', MAX_VISUAL_POP_SIZE); popSizeCapInfoSpan.textContent = `Cap: ${MAX_VISUAL_POP_SIZE}`; if (parseInt(populationSizeInput.value) > MAX_VISUAL_POP_SIZE) { populationSizeInput.value = MAX_VISUAL_POP_SIZE; } } else { populationSizeInput.removeAttribute('max'); popSizeCapInfoSpan.textContent = "No Cap"; } }
+
+        // --- Maze Editing ---
+        canvas.addEventListener('click', (event) => { if (isAnimating || gaRunning || acoRunning) return; const rect = canvas.getBoundingClientRect(); const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height; const x = (event.clientX - rect.left) * scaleX; const y = (event.clientY - rect.top) * scaleY; const clickedCol = Math.floor(x / CELL_SIZE); const clickedRow = Math.floor(y / CELL_SIZE); if (clickedRow < 0 || clickedRow >= ROWS || clickedCol < 0 || clickedCol >= COLS) return; if (clickedRow === 0 || clickedRow === ROWS - 1 || clickedCol === 0 || clickedCol === COLS - 1 || (clickedRow === START_ROW && clickedCol === START_COL) || (clickedRow === END_ROW && clickedCol === END_COL)) { return; } userMazeGrid[clickedRow][clickedCol] = 1 - userMazeGrid[clickedRow][clickedCol]; drawBaseMaze(); });
+
+        // --- Maze Generation (Recursive Backtracker - Restored) ---
+        function generateRandomMaze() {
+            console.log("Generating random maze using Recursive Backtracker...");
+            initializeWalledMazeGrid(); // Grid is ALL walls (value 1)
+
+            const visited = Array(ROWS).fill(null).map(() => Array(COLS).fill(false));
+            const stack = [];
+            const startR = START_ROW; const startC = START_COL;
+
+            // Mark start as path (0) and visited
+            userMazeGrid[startR][startC] = 0;
+            visited[startR][startC] = true;
+            stack.push({ r: startR, c: startC });
+
+            while (stack.length > 0) {
+                const current = stack[stack.length - 1]; // Peek
+                const r = current.r;
+                const c = current.c;
+
+                const neighbors = [];
+                const potentialMoves = [
+                    { nextR: r - 2, nextC: c, wallR: r - 1, wallC: c }, // N
+                    { nextR: r + 2, nextC: c, wallR: r + 1, wallC: c }, // S
+                    { nextR: r, nextC: c - 2, wallR: r, wallC: c - 1 }, // W
+                    { nextR: r, nextC: c + 2, wallR: r, wallC: c + 1 }  // E
+                ];
+                potentialMoves.sort(() => Math.random() - 0.5); // Shuffle
+
+                for (const move of potentialMoves) {
+                    // Check if the potential NEXT CELL is within the carvable bounds (1 to SIZE-2 inclusive)
+                    // AND is not already visited
+                    if (move.nextR > 0 && move.nextR < ROWS - 1 &&
+                        move.nextC > 0 && move.nextC < COLS - 1 &&
+                        !visited[move.nextR][move.nextC])
+                    {
+                        const wallR = move.wallR;
+                        const wallC = move.wallC;
+                        neighbors.push({ r: move.nextR, c: move.nextC, wallR: wallR, wallC: wallC });
+                    }
+                }
+
+                if (neighbors.length > 0) {
+                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    // Carve wall & cell
+                    userMazeGrid[next.wallR][next.wallC] = 0;
+                    userMazeGrid[next.r][next.c] = 0;
+                    visited[next.r][next.c] = true;
+                    stack.push({ r: next.r, c: next.c });
+                } else {
+                    stack.pop(); // Backtrack
+                }
+            } // End while loop
+
+            // Finalize Start/End points
+            userMazeGrid[START_ROW][START_COL] = 2;
+            userMazeGrid[END_ROW][END_COL] = 3;
+
+            drawBaseMaze();
+            updateStatus(selectedAlgorithm, "Random Maze Generated (Backtracker)");
+            console.log("Maze generation complete using Recursive Backtracker.");
+        } // End generateRandomMaze
+
+
+        // --- Simple Min-Heap Implementation for A* ---
+        class MinHeap { constructor() { this.heap = []; } insert(node) { this.heap.push(node); this.bubbleUp(this.heap.length - 1); } extractMin() { if (this.heap.length === 0) return null; if (this.heap.length === 1) return this.heap.pop(); const min = this.heap[0]; this.heap[0] = this.heap.pop(); this.sinkDown(0); return min; } isEmpty() { return this.heap.length === 0; } bubbleUp(index) { while (index > 0) { const parentIndex = Math.floor((index - 1) / 2); if (this.heap[index].f < this.heap[parentIndex].f) { [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]]; index = parentIndex; } else { break; } } } sinkDown(index) { const leftChildIndex = 2 * index + 1; const rightChildIndex = 2 * index + 2; let smallestIndex = index; if (leftChildIndex < this.heap.length && this.heap[leftChildIndex].f < this.heap[smallestIndex].f) { smallestIndex = leftChildIndex; } if (rightChildIndex < this.heap.length && this.heap[rightChildIndex].f < this.heap[smallestIndex].f) { smallestIndex = rightChildIndex; } if (smallestIndex !== index) { [this.heap[index], this.heap[smallestIndex]] = [this.heap[smallestIndex], this.heap[index]]; this.sinkDown(smallestIndex); } } }
+
+        // --- A* Heuristic ---
+        function manhattanDistance(nodeR, nodeC, goalR, goalC) { return Math.abs(nodeR - goalR) + Math.abs(nodeC - goalC); }
+
+        // --- A* Search (Synchronous version) ---
+        function solveAStar_Sync() { const openSet = new MinHeap(); const closedSet = new Set(); const cameFrom = new Map(); const gScore = new Map(); let visitedCount = 0; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { gScore.set(`${r},${c}`, Infinity); } } const startKey = `${startCoords.r},${startCoords.c}`; gScore.set(startKey, 0); const startNode = { r: startCoords.r, c: startCoords.c, g: 0, h: manhattanDistance(startCoords.r, startCoords.c, endCoords.r, endCoords.c), f: manhattanDistance(startCoords.r, startCoords.c, endCoords.r, endCoords.c) }; openSet.insert(startNode); while (!openSet.isEmpty()) { const current = openSet.extractMin(); const currentKey = `${current.r},${current.c}`; if (closedSet.has(currentKey)) { continue; } closedSet.add(currentKey); visitedCount++; if (current.r === endCoords.r && current.c === endCoords.c) { const path = []; let tempKey = currentKey; while (tempKey) { const [r, c] = tempKey.split(',').map(Number); path.push({ r, c }); tempKey = cameFrom.get(tempKey); } return { path: path.reverse(), visitedCount: visitedCount }; } const neighbors = [ { r: current.r - 1, c: current.c }, { r: current.r + 1, c: current.c }, { r: current.r, c: current.c + 1 }, { r: current.r, c: current.c - 1 } ]; for (const neighbor of neighbors) { const neighborKey = `${neighbor.r},${neighbor.c}`; if (neighbor.r < 0 || neighbor.r >= ROWS || neighbor.c < 0 || neighbor.c >= COLS || userMazeGrid[neighbor.r]?.[neighbor.c] === 1) { continue; } if (closedSet.has(neighborKey)) { continue; } const tentativeGScore = current.g + 1; if (tentativeGScore < (gScore.get(neighborKey) || Infinity)) { cameFrom.set(neighborKey, currentKey); gScore.set(neighborKey, tentativeGScore); const hScore = manhattanDistance(neighbor.r, neighbor.c, endCoords.r, endCoords.c); const fScore = tentativeGScore + hScore; openSet.insert({ r: neighbor.r, c: neighbor.c, g: tentativeGScore, h: hScore, f: fScore }); } } } return { path: null, visitedCount: visitedCount }; }
+
+        // --- A* Search (Animated version) ---
+        function animateAStar() { const openSet = new MinHeap(); const closedSet = new Set(); const cameFrom = new Map(); const gScore = new Map(); let visitedCount = 0; let pathFound = null; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { gScore.set(`${r},${c}`, Infinity); } } const startKey = `${startCoords.r},${startCoords.c}`; gScore.set(startKey, 0); const startNode = { r: startCoords.r, c: startCoords.c, g: 0, h: manhattanDistance(startCoords.r, startCoords.c, endCoords.r, endCoords.c), f: manhattanDistance(startCoords.r, startCoords.c, endCoords.r, endCoords.c) }; openSet.insert(startNode); isAnimating = true; enableActionButtons(false); updateStatus('AStar', "Visualizing Search..."); function step() { if (!isAnimating || openSet.isEmpty()) { isAnimating = false; enableActionButtons(true); if (pathFound) { drawSolvedPath(pathFound, ASTAR_PATH_COLOR); updateStatus('AStar', "Solution Found!", null, null, pathFound.length - 1, visitedCount); showMessage("Solution Found!"); } else { updateStatus('AStar', "No path found", null, null, null, visitedCount); showMessage("No path found.", true); } if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; return; } const current = openSet.extractMin(); const currentKey = `${current.r},${current.c}`; if (closedSet.has(currentKey)) { animationTimerId = setTimeout(step, animationDelay); return; } closedSet.add(currentKey); visitedCount++; drawVisitedCell(current.r, current.c, ASTAR_VISITED_COLOR); if (current.r === endCoords.r && current.c === endCoords.c) { const path = []; let tempKey = currentKey; while(tempKey) { const [r, c] = tempKey.split(',').map(Number); path.push({r, c}); tempKey = cameFrom.get(tempKey); } pathFound = path.reverse(); isAnimating = false; } if (!pathFound) { const neighbors = [ { r: current.r - 1, c: current.c }, { r: current.r + 1, c: current.c }, { r: current.r, c: current.c + 1 }, { r: current.r, c: current.c - 1 } ]; for (const neighbor of neighbors) { const neighborKey = `${neighbor.r},${neighbor.c}`; if (neighbor.r < 0 || neighbor.r >= ROWS || neighbor.c < 0 || neighbor.c >= COLS || userMazeGrid[neighbor.r]?.[neighbor.c] === 1) { continue; } if (closedSet.has(neighborKey)) { continue; } const tentativeGScore = current.g + 1; if (tentativeGScore < (gScore.get(neighborKey) || Infinity)) { cameFrom.set(neighborKey, currentKey); gScore.set(neighborKey, tentativeGScore); const hScore = manhattanDistance(neighbor.r, neighbor.c, endCoords.r, endCoords.c); const fScore = tentativeGScore + hScore; openSet.insert({ r: neighbor.r, c: neighbor.c, g: tentativeGScore, h: hScore, f: fScore }); } } } animationTimerId = setTimeout(step, animationDelay); } drawBaseMaze(); animationTimerId = setTimeout(step, animationDelay); }
+
+        // --- BFS & DFS (Synchronous versions - Added Logging) ---
+        function solveBFS_Sync() {
+             console.log("Starting BFS Sync..."); // Log start
+             const queue = [];
+             const visited = new Set();
+             const parentMap = new Map();
+             let visitedCount = 0;
+             let iterations = 0; // Log iterations
+
+             const startKey = `${startCoords.r},${startCoords.c}`;
+             queue.push(startCoords);
+             visited.add(startKey);
+             visitedCount++;
+
+             while (queue.length > 0) {
+                 iterations++;
+                 if (iterations % 100 === 0) { // Log progress periodically
+                     // console.log(`BFS Sync Iteration: ${iterations}, Queue Size: ${queue.length}`);
+                 }
+                 if (iterations > ROWS * COLS * 2) { // Safety break
+                     console.error("BFS Sync exceeded max iterations, breaking loop.");
+                     return { path: null, visitedCount: visitedCount };
+                 }
+
+                 const current = queue.shift();
+                 // console.log(`  BFS Visiting: (${current.r}, ${current.c})`); // Can be very verbose
+
+                 if (current.r === endCoords.r && current.c === endCoords.c) {
+                     console.log(`BFS Sync Goal Found! Iterations: ${iterations}`); // Log goal found
+                     const path = []; let node = current;
+                     while (node) { path.push(node); const parentKey = parentMap.get(`${node.r},${node.c}`); node = parentKey ? { r: parseInt(parentKey.split(',')[0]), c: parseInt(parentKey.split(',')[1]) } : null; }
+                     return { path: path.reverse(), visitedCount: visitedCount };
+                 }
+
+                 const neighbors = [ { r: current.r - 1, c: current.c }, { r: current.r + 1, c: current.c }, { r: current.r, c: current.c + 1 }, { r: current.r, c: current.c - 1 } ];
+                 for (const neighbor of neighbors) {
+                     const neighborKey = `${neighbor.r},${neighbor.c}`;
+                     if (neighbor.r >= 0 && neighbor.r < ROWS && neighbor.c >= 0 && neighbor.c < COLS &&
+                         userMazeGrid[neighbor.r]?.[neighbor.c] !== 1 && // Check wall using optional chaining
+                         !visited.has(neighborKey))
+                     {
+                         visited.add(neighborKey);
+                         visitedCount++;
+                         parentMap.set(neighborKey, `${current.r},${current.c}`);
+                         queue.push(neighbor);
+                     }
+                 }
+             }
+             console.log(`BFS Sync Finished (No Path). Iterations: ${iterations}`); // Log finish
+             return { path: null, visitedCount: visitedCount };
+        } // End solveBFS_Sync
+
+        function solveDFS_Sync() {
+             console.log("Starting DFS Sync..."); // Log start
+             const stack = [];
+             const visited = new Set();
+             const parentMap = new Map();
+             let visitedCount = 0;
+             let iterations = 0; // Log iterations
+
+             const startKey = `${startCoords.r},${startCoords.c}`;
+             stack.push(startCoords);
+             visited.add(startKey); // Mark visited on push
+             visitedCount++;
+
+
+             while (stack.length > 0) {
+                 iterations++;
+                 if (iterations % 100 === 0) { // Log progress periodically
+                     // console.log(`DFS Sync Iteration: ${iterations}, Stack Size: ${stack.length}`);
+                 }
+                  if (iterations > ROWS * COLS * 2) { // Safety break
+                     console.error("DFS Sync exceeded max iterations, breaking loop.");
+                     return { path: null, visitedCount: visitedCount };
+                 }
+
+                 const current = stack.pop();
+                 // console.log(`  DFS Visiting: (${current.r}, ${current.c})`); // Can be very verbose
+
+                 if (current.r === endCoords.r && current.c === endCoords.c) {
+                     console.log(`DFS Sync Goal Found! Iterations: ${iterations}`); // Log goal found
+                     const path = []; let node = current;
+                     while (node) { path.push(node); const parentKey = parentMap.get(`${node.r},${node.c}`); node = parentKey ? { r: parseInt(parentKey.split(',')[0]), c: parseInt(parentKey.split(',')[1]) } : null; }
+                     return { path: path.reverse(), visitedCount: visitedCount };
+                 }
+
+                 // Process neighbors - standard DFS pushes unvisited neighbors
+                 const neighbors = [ { r: current.r - 1, c: current.c }, { r: current.r + 1, c: current.c }, { r: current.r, c: current.c + 1 }, { r: current.r, c: current.c - 1 } ];
+                 // Optional: Shuffle neighbors for less predictable path
+                 // neighbors.sort(() => Math.random() - 0.5);
+                 for (const neighbor of neighbors) {
+                     const neighborKey = `${neighbor.r},${neighbor.c}`;
+                     if (neighbor.r >= 0 && neighbor.r < ROWS && neighbor.c >= 0 && neighbor.c < COLS &&
+                         userMazeGrid[neighbor.r]?.[neighbor.c] !== 1 && // Check wall using optional chaining
+                         !visited.has(neighborKey))
+                     {
+                         visited.add(neighborKey);
+                         visitedCount++;
+                         parentMap.set(neighborKey, `${current.r},${current.c}`);
+                         stack.push(neighbor);
+                     }
+                 }
+             }
+             console.log(`DFS Sync Finished (No Path). Iterations: ${iterations}`); // Log finish
+             return { path: null, visitedCount: visitedCount };
+        } // End solveDFS_Sync
+
+        // --- BFS & DFS (Animated versions) ---
+        function animateSearch(algoType) { const queue = []; const visited = new Set(); const parentMap = new Map(); let visitedCount = 0; let pathFound = null; const visitedColor = algoType === 'BFS' ? BFS_VISITED_COLOR : DFS_VISITED_COLOR; const finalPathColor = algoType === 'BFS' ? BFS_PATH_COLOR : DFS_PATH_COLOR; const startKey = `${startCoords.r},${startCoords.c}`; queue.push(startCoords); visited.add(startKey); visitedCount++; isAnimating = true; enableActionButtons(false); updateStatus(algoType, "Visualizing Search..."); function step() { if (!isAnimating || queue.length === 0) { isAnimating = false; enableActionButtons(true); if (pathFound) { drawSolvedPath(pathFound, finalPathColor); updateStatus(algoType, "Solution Found!", null, null, pathFound.length - 1, visitedCount); showMessage("Solution Found!"); } else { updateStatus(algoType, "No path found", null, null, null, visitedCount); showMessage("No path found.", true); } if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; return; } const current = (algoType === 'BFS') ? queue.shift() : queue.pop(); drawVisitedCell(current.r, current.c, visitedColor); if (current.r === endCoords.r && current.c === endCoords.c) { const path = []; let node = current; while(node) { path.push(node); const pk = parentMap.get(`${node.r},${node.c}`); node = pk ? {r:parseInt(pk.split(',')[0]), c:parseInt(pk.split(',')[1])} : null; } pathFound = path.reverse(); isAnimating = false; } if (!pathFound) { const neighbors = [ { r: current.r - 1, c: current.c }, { r: current.r + 1, c: current.c }, { r: current.r, c: current.c + 1 }, { r: current.r, c: current.c - 1 } ]; if (algoType === 'DFS') neighbors.sort(() => Math.random() - 0.5); for (const neighbor of neighbors) { const neighborKey = `${neighbor.r},${neighbor.c}`; if (neighbor.r >= 0 && neighbor.r < ROWS && neighbor.c >= 0 && neighbor.c < COLS && userMazeGrid[neighbor.r]?.[neighbor.c] !== 1 && !visited.has(neighborKey)) { visited.add(neighborKey); visitedCount++; parentMap.set(neighborKey, `${current.r},${current.c}`); queue.push(neighbor); } } } animationTimerId = setTimeout(step, animationDelay); } drawBaseMaze(); animationTimerId = setTimeout(step, animationDelay); }
+
+        // --- Ant Colony Optimization (ACO) ---
+        function initializePheromones() { pheromoneGrid = []; for (let r = 0; r < ROWS; r++) { pheromoneGrid[r] = []; for (let c = 0; c < COLS; c++) { if (userMazeGrid[r]?.[c] !== 1) { pheromoneGrid[r][c] = INITIAL_PHEROMONE; } else { pheromoneGrid[r][c] = 0; } } } acoBestPath = null; acoBestPathLength = Infinity; acoIteration = 0; }
+        function drawPheromones(maxPheromone) { if (maxPheromone <= INITIAL_PHEROMONE) maxPheromone = INITIAL_PHEROMONE * 1.1; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { if (pheromoneGrid[r]?.[c] > 0 && userMazeGrid[r]?.[c] !== 1) { const alpha = Math.min(0.7, (pheromoneGrid[r][c] / maxPheromone) * 0.7); if (alpha > 0.01) { const color = ACO_PHEROMONE_COLOR.replace('P_ALPHA', alpha.toFixed(2)); drawVisitedCell(r, c, color); } } } } }
+        function calculateHeuristic(r, c) { const dist = manhattanDistance(r, c, endCoords.r, endCoords.c); return 1.0 / (dist + HEURISTIC_EPSILON); }
+        function chooseNextStep(ant, antVisited) { const { r, c } = ant.currentPos; const neighbors = []; const possibleMoves = [ { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: 1 }, { dr: 0, dc: -1 } ]; for (const move of possibleMoves) { const nr = r + move.dr; const nc = c + move.dc; const neighborKey = `${nr},${nc}`; if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && userMazeGrid[nr]?.[nc] !== 1 && !antVisited.has(neighborKey)) { const pheromone = Math.pow(pheromoneGrid[nr]?.[nc] || INITIAL_PHEROMONE, ALPHA); const heuristic = Math.pow(calculateHeuristic(nr, nc), BETA); neighbors.push({ r: nr, c: nc, probabilityFactor: pheromone * heuristic }); } } if (neighbors.length === 0) { return null; } const totalProbabilityFactor = neighbors.reduce((sum, n) => sum + n.probabilityFactor, 0); if (totalProbabilityFactor === 0) { return neighbors[Math.floor(Math.random() * neighbors.length)]; } const probabilities = neighbors.map(n => n.probabilityFactor / totalProbabilityFactor); let random = Math.random(); let cumulativeProbability = 0; for (let i = 0; i < neighbors.length; i++) { cumulativeProbability += probabilities[i]; if (random <= cumulativeProbability) { return neighbors[i]; } } return neighbors[neighbors.length - 1]; }
+        function runAcoIteration() { let iterationBestPath = null; let iterationBestLength = Infinity; let maxPheromone = INITIAL_PHEROMONE; for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { if (pheromoneGrid[r]?.[c] > 0) { pheromoneGrid[r][c] *= (1.0 - RHO); pheromoneGrid[r][c] = Math.max(INITIAL_PHEROMONE * 0.1, pheromoneGrid[r][c]); maxPheromone = Math.max(maxPheromone, pheromoneGrid[r][c]); } } } const antPaths = []; for (let i = 0; i < NUM_ANTS; i++) { const ant = { currentPos: { ...startCoords }, path: [{ ...startCoords }] }; const antVisited = new Set([`${startCoords.r},${startCoords.c}`]); let steps = 0; const MAX_STEPS = ROWS * COLS * 2; while (steps < MAX_STEPS) { if (ant.currentPos.r === endCoords.r && ant.currentPos.c === endCoords.c) { antPaths.push(ant.path); if (ant.path.length < iterationBestLength) { iterationBestLength = ant.path.length; iterationBestPath = ant.path; } if (ant.path.length < acoBestPathLength) { acoBestPathLength = ant.path.length; acoBestPath = [...ant.path]; } break; } const nextMove = chooseNextStep(ant, antVisited); if (nextMove === null) { break; } ant.currentPos = { r: nextMove.r, c: nextMove.c }; ant.path.push(ant.currentPos); antVisited.add(`${nextMove.r},${nextMove.c}`); steps++; } } antPaths.forEach(path => { const depositAmount = Q / path.length; path.forEach(cell => { if (pheromoneGrid[cell.r]?.[cell.c] !== undefined) { pheromoneGrid[cell.r][cell.c] += depositAmount; maxPheromone = Math.max(maxPheromone, pheromoneGrid[cell.r][cell.c]); } }); }); acoIteration++; return { iterationBestPath, iterationBestLength, maxPheromone }; }
+        function solveACO_Sync() { initializePheromones(); for (let i = 0; i < ACO_ITERATIONS; i++) { runAcoIteration(); } return { path: acoBestPath, visitedCount: null }; }
+        function animateACO() { initializePheromones(); isAnimating = true; acoRunning = true; enableActionButtons(false); updateStatus('ACO', "Visualizing Iterations...", 0); let overallMaxPheromone = INITIAL_PHEROMONE; function step() { if (!isAnimating || acoIteration >= ACO_ITERATIONS) { isAnimating = false; acoRunning = false; enableActionButtons(true); if (acoBestPath) { drawBaseMaze(); drawSolvedPath(acoBestPath, ACO_BEST_PATH_COLOR); updateStatus('ACO', "Solution Found!", acoIteration, null, acoBestPathLength - 1); showMessage("Solution Found!"); } else { updateStatus('ACO', "No path found", acoIteration, null, null); showMessage("No path found by ACO.", true); } if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; return; } const result = runAcoIteration(); overallMaxPheromone = Math.max(overallMaxPheromone, result.maxPheromone); drawBaseMaze(); if (acoIteration % 5 === 0 || acoIteration === 1) { drawPheromones(overallMaxPheromone); } if (acoBestPath) { drawSolvedPath(acoBestPath, ACO_BEST_PATH_COLOR, 2); } updateStatus('ACO', "Visualizing Iterations...", acoIteration, null, acoBestPathLength === Infinity ? null : acoBestPathLength - 1); animationTimerId = setTimeout(step, animationDelay); } drawBaseMaze(); animationTimerId = setTimeout(step, animationDelay); }
+
+        // --- Genetic Algorithm Functions & Loop ---
+        function createIndividual() { const path = []; for (let i = 0; i < PATH_LENGTH; i++) { path.push(MOVES[Math.floor(Math.random() * MOVES.length)]); } return { path: path, fitness: 0, finalPos: null, reachedEnd: false, actualPathLength: 0 }; }
+        function initializePopulation() { population = []; let currentPopSize = parseInt(populationSizeInput.value); if (selectedAlgorithm === 'GA' && visualizeCheckbox.checked) { currentPopSize = Math.min(currentPopSize, MAX_VISUAL_POP_SIZE); } for (let i = 0; i < currentPopSize; i++) { population.push(createIndividual()); } bestIndividual = null; generation = 0; POPULATION_SIZE = currentPopSize; }
+        function calculateFitness(individual) { if (!startCoords || !endCoords) return 0; let currentR = startCoords.r; let currentC = startCoords.c; let distanceToEnd = Infinity; let hitWallPenalty = 0; const WALL_PENALTY_VALUE = 150; let reachedEnd = false; let actualPathLength = 0; for (let i = 0; i < individual.path.length; i++) { const move = individual.path[i]; let nextR = currentR; let nextC = currentC; switch (move) { case 'N': nextR--; break; case 'S': nextR++; break; case 'W': nextC--; break; case 'E': nextC++; break; } if (nextR < 0 || nextR >= ROWS || nextC < 0 || nextC >= COLS || userMazeGrid[nextR]?.[nextC] === 1) { hitWallPenalty = WALL_PENALTY_VALUE; break; } currentR = nextR; currentC = nextC; actualPathLength = i + 1; if (currentR === endCoords.r && currentC === endCoords.c) { reachedEnd = true; break; } } distanceToEnd = Math.abs(currentR - endCoords.r) + Math.abs(currentC - endCoords.c); let fitness = 100.0 / (distanceToEnd + 1); fitness -= hitWallPenalty; if (!reachedEnd) { fitness += actualPathLength * 0.01; } else { fitness += 5000; fitness += (PATH_LENGTH - actualPathLength) * 1.0; } individual.fitness = Math.max(0, fitness); individual.finalPos = { r: currentR, c: currentC }; individual.reachedEnd = reachedEnd; individual.actualPathLength = actualPathLength; return individual.fitness; }
+        function evaluatePopulation() { let currentBestFitness = -Infinity; let currentBestIndividualInGen = null; population.forEach(individual => { calculateFitness(individual); const fitnessValue = individual.fitness ?? 0; if (fitnessValue > currentBestFitness) { currentBestFitness = fitnessValue; currentBestIndividualInGen = individual; } }); let genBestReachesEnd = currentBestIndividualInGen && currentBestIndividualInGen.reachedEnd; let overallBestReachesEnd = bestIndividual && bestIndividual.reachedEnd; let updateOverallBest = false; if (!bestIndividual) { updateOverallBest = true; } else if (currentBestIndividualInGen) { const currentGenFitness = currentBestIndividualInGen.fitness ?? 0; const overallBestFitness = bestIndividual.fitness ?? 0; if (genBestReachesEnd && !overallBestReachesEnd) { updateOverallBest = true; } else if (genBestReachesEnd && overallBestReachesEnd) { if (currentGenFitness > overallBestFitness) updateOverallBest = true; } else if (!genBestReachesEnd && !overallBestReachesEnd) { if (currentGenFitness > overallBestFitness) { updateOverallBest = true; } else if (currentGenFitness === overallBestFitness && currentBestIndividualInGen.actualPathLength > bestIndividual.actualPathLength) { updateOverallBest = true; } } } if (updateOverallBest && currentBestIndividualInGen) { bestIndividual = JSON.parse(JSON.stringify(currentBestIndividualInGen)); } }
+        function selectParents() { const parents = []; if (population.length === 0) return parents; const tournamentSize = Math.max(2, Math.min(5, Math.floor(POPULATION_SIZE * 0.1))); for (let i = 0; i < POPULATION_SIZE; i++) { let tournamentBest = null; let tournamentBestFitness = -Infinity; for (let j = 0; j < tournamentSize; j++) { const randomIndex = Math.floor(Math.random() * population.length); const contender = population[randomIndex]; if (!contender) continue; const contenderFitness = contender.fitness ?? -Infinity; if (contenderFitness > tournamentBestFitness) { tournamentBest = contender; tournamentBestFitness = contenderFitness; } } if (!tournamentBest) { const validIndividuals = population.filter(ind => ind && typeof ind.fitness === 'number'); if (validIndividuals.length > 0) { tournamentBest = validIndividuals[Math.floor(Math.random() * validIndividuals.length)]; } else { tournamentBest = createIndividual(); calculateFitness(tournamentBest); } } parents.push(tournamentBest); } return parents; }
+        function crossover(parent1, parent2) { if (!parent1 || !parent1.path || !parent2 || !parent2.path) { console.warn("Crossover invalid parent(s)."); return [ createIndividual(), createIndividual() ]; } const crossoverPoint = Math.floor(Math.random() * PATH_LENGTH); const child1Path = parent1.path.slice(0, crossoverPoint).concat(parent2.path.slice(crossoverPoint)); const child2Path = parent2.path.slice(0, crossoverPoint).concat(parent1.path.slice(crossoverPoint)); return [ { path: child1Path, fitness: 0, finalPos: null, reachedEnd: false, actualPathLength: 0 }, { path: child2Path, fitness: 0, finalPos: null, reachedEnd: false, actualPathLength: 0 } ]; }
+        function mutate(individual) { if (!individual || !individual.path) { console.warn("Mutation invalid individual."); return; } for (let i = 0; i < individual.path.length; i++) { if (Math.random() < MUTATION_RATE) { individual.path[i] = MOVES[Math.floor(Math.random() * MOVES.length)]; } } }
+        function createNextGeneration() { const parents = selectParents(); const newPopulation = []; const targetSize = POPULATION_SIZE; if (bestIndividual && bestIndividual.path && typeof bestIndividual.fitness === 'number') { newPopulation.push(JSON.parse(JSON.stringify(bestIndividual))); } else if (bestIndividual) { console.warn("Best individual invalid elitism."); } while (newPopulation.length < targetSize) { if (parents.length === 0) { console.error("Parents empty."); while(newPopulation.length < targetSize) newPopulation.push(createIndividual()); break; } const p1Idx = Math.floor(Math.random() * parents.length); let p2Idx = Math.floor(Math.random() * parents.length); if (parents.length > 1) { let attempts = 0; while (p1Idx === p2Idx && attempts < parents.length) { p2Idx = Math.floor(Math.random() * parents.length); attempts++; } } const parent1 = parents[p1Idx]; const parent2 = parents[p2Idx]; if (!parent1 || !parent2) { console.warn(`Invalid parent(s) selected... Skipping.`); if (newPopulation.length < targetSize) newPopulation.push(createIndividual()); continue; } const [child1, child2] = crossover(parent1, parent2); mutate(child1); mutate(child2); if (newPopulation.length < targetSize) newPopulation.push(child1); if (newPopulation.length < targetSize) newPopulation.push(child2); } population = newPopulation.slice(0, targetSize).filter(ind => ind && ind.path); while (population.length < targetSize) { console.warn("Population low..."); population.push(createIndividual()); } generation++; }
+        function runGA() { if (!gaRunning) return; try { evaluatePopulation(); drawBaseMaze(); if (visualizeCheckbox.checked) { const topN = 10; const sortedPop = [...population].sort((a, b) => (b.fitness ?? 0) - (a.fitness ?? 0)); const topIndividuals = sortedPop.slice(0, topN); topIndividuals.forEach(individual => { if (individual.actualPathLength !== undefined) { const effectivePathMoves = individual.path.slice(0, individual.actualPathLength); drawGAPath(effectivePathMoves, GA_POPULATION_PATH_COLOR, 1, false); } }); } if (generation % 10 === 0 || generation < 10) { console.log(`Gen: ${generation}, Best Fitness: ${bestIndividual?.fitness?.toFixed(2)}, Best Path Len: ${bestIndividual?.actualPathLength}, Reached End: ${bestIndividual?.reachedEnd}`); } if (bestIndividual) { const effectivePathMoves = bestIndividual.path.slice(0, bestIndividual.actualPathLength); drawGAPath(effectivePathMoves, GA_PATH_COLOR, 3, true); updateStatus('GA', "Running", generation, bestIndividual.fitness, bestIndividual.actualPathLength); } else { updateStatus('GA', "Running", generation, null, null); if (generation > 5) console.log(`Gen: ${generation}, No best individual.`); } if (bestIndividual && bestIndividual.reachedEnd) { updateStatus('GA', "Solution Found!", generation, bestIndividual.fitness, bestIndividual.actualPathLength); showMessage("Solution Found!"); console.log("--- GA: SOLUTION FOUND ---"); gaRunning = false; enableActionButtons(true); if(gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if(animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; return; } if (generation >= MAX_GENERATIONS) { updateStatus('GA', "Max Generations Reached", generation, bestIndividual?.fitness, bestIndividual?.actualPathLength); showMessage("Max generations reached."); console.log("--- GA: MAX GENERATIONS REACHED ---"); gaRunning = false; enableActionButtons(true); if(gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if(animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; return; } createNextGeneration(); if (visualizeCheckbox.checked) { if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; animationTimerId = setTimeout(runGA, animationDelay); } else { if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; gaAnimationFrameId = requestAnimationFrame(runGA); } } catch (error) { console.error("Error in GA loop:", error); showMessage("Error in GA loop.", true); gaRunning = false; enableActionButtons(true); if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if(animationTimerId) clearTimeout(animationTimerId); animationTimerId = null;} }
+
+        // --- Event Listeners ---
+        algoRadios.forEach(radio => { radio.addEventListener('change', (event) => { selectedAlgorithm = event.target.value; console.log("Selected Algorithm:", selectedAlgorithm); if (gaRunning || isAnimating || acoRunning) { gaRunning = false; isAnimating = false; acoRunning = false; if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; enableActionButtons(true); } const isCompare = selectedAlgorithm === 'Compare'; toggleAlgoControls(); visualizeCheckbox.disabled = isCompare; if (visualizeCheckbox.disabled) visualizeCheckbox.checked = false; speedControlContainer.style.display = visualizeCheckbox.checked && !visualizeCheckbox.disabled ? 'block' : 'none'; updatePopulationCap(); updateStatus(selectedAlgorithm, "Idle - Ready to start"); drawBaseMaze(); }); });
+        visualizeCheckbox.addEventListener('change', () => { speedControlContainer.style.display = visualizeCheckbox.checked && !visualizeCheckbox.disabled ? 'block' : 'none'; updatePopulationCap(); });
+        speedSlider.addEventListener('input', (e) => { animationDelay = parseInt(e.target.value); speedValueSpan.textContent = animationDelay; });
+        startButton.addEventListener('click', () => { if (gaRunning || isAnimating || acoRunning) { gaRunning = false; isAnimating = false; acoRunning = false; if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; } enableActionButtons(false); drawBaseMaze(); console.log(`--- STARTING ${selectedAlgorithm} ---`); if (selectedAlgorithm === 'GA') { POPULATION_SIZE = parseInt(populationSizeInput.value); MUTATION_RATE = parseFloat(mutationRateInput.value) / 100.0; MAX_GENERATIONS = parseInt(maxGenerationsInput.value); console.log("GA Params:", { POPULATION_SIZE, MUTATION_RATE: MUTATION_RATE.toFixed(3), MAX_GENERATIONS, PATH_LENGTH }); initializePopulation(); gaRunning = true; updateStatus(selectedAlgorithm, "Initializing...", 0, null, null); if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); if (animationTimerId) clearTimeout(animationTimerId); runGA(); } else if (selectedAlgorithm === 'BFS' || selectedAlgorithm === 'DFS') { if (visualizeCheckbox.checked && !visualizeCheckbox.disabled) { animateSearch(selectedAlgorithm); } else { updateStatus(selectedAlgorithm, "Solving...", null, null, null); setTimeout(() => { const result = (selectedAlgorithm === 'BFS') ? solveBFS_Sync() : solveDFS_Sync(); if (result.path) { const pathColor = selectedAlgorithm === 'BFS' ? BFS_PATH_COLOR : DFS_PATH_COLOR; drawSolvedPath(result.path, pathColor); updateStatus(selectedAlgorithm, "Solution Found!", null, null, result.path.length - 1, result.visitedCount); showMessage("Solution Found!"); } else { updateStatus(selectedAlgorithm, "No path found", null, null, null, result.visitedCount); showMessage("No path found.", true); } enableActionButtons(true); }, 10); } } else if (selectedAlgorithm === 'AStar') { if (visualizeCheckbox.checked && !visualizeCheckbox.disabled) { animateAStar(); } else { updateStatus(selectedAlgorithm, "Solving...", null, null, null); setTimeout(() => { const result = solveAStar_Sync(); if (result.path) { drawSolvedPath(result.path, ASTAR_PATH_COLOR); updateStatus(selectedAlgorithm, "Solution Found!", null, null, result.path.length - 1, result.visitedCount); showMessage("Solution Found!"); } else { updateStatus(selectedAlgorithm, "No path found", null, null, null, result.visitedCount); showMessage("No path found.", true); } enableActionButtons(true); }, 10); } } else if (selectedAlgorithm === 'ACO') { NUM_ANTS = parseInt(numAntsInput.value); ACO_ITERATIONS = parseInt(acoIterationsInput.value); RHO = parseFloat(pheromoneEvaporationInput.value); ALPHA = parseFloat(pheromoneAlphaInput.value); BETA = parseFloat(heuristicBetaInput.value); Q = parseFloat(pheromoneDepositInput.value); console.log("ACO Params:", {NUM_ANTS, ACO_ITERATIONS, RHO, ALPHA, BETA, Q}); if (visualizeCheckbox.checked && !visualizeCheckbox.disabled) { animateACO(); } else { updateStatus(selectedAlgorithm, "Solving...", null, null, null); setTimeout(() => { const result = solveACO_Sync(); if (result.path) { drawSolvedPath(result.path, ACO_BEST_PATH_COLOR); updateStatus(selectedAlgorithm, "Solution Found!", ACO_ITERATIONS, null, result.path.length - 1); showMessage("Solution Found!"); } else { updateStatus(selectedAlgorithm, "No path found", ACO_ITERATIONS, null, null); showMessage("No path found by ACO.", true); } enableActionButtons(true); }, 10); } } else if (selectedAlgorithm === 'Compare') { updateStatus(selectedAlgorithm, "Running BFS & DFS...", null, null, null); setTimeout(() => { console.log("Running BFS Sync..."); const bfsResult = solveBFS_Sync(); console.log("Running DFS Sync..."); const dfsResult = solveDFS_Sync(); drawBaseMaze(); let pathLenStr = "BFS: "; let cellsExploredStr = "BFS: "; if(bfsResult.path) { console.log(`BFS Path Length: ${bfsResult.path.length - 1}, Visited: ${bfsResult.visitedCount}`); drawSolvedPath(bfsResult.path, COMPARE_BFS_COLOR, 3); pathLenStr += (bfsResult.path.length - 1); cellsExploredStr += bfsResult.visitedCount; } else { console.log(`BFS: No path found, Visited: ${bfsResult.visitedCount}`); pathLenStr += "None"; cellsExploredStr += bfsResult.visitedCount; } pathLenStr += " / DFS: "; cellsExploredStr += " / DFS: "; if(dfsResult.path) { console.log(`DFS Path Length: ${dfsResult.path.length - 1}, Visited: ${dfsResult.visitedCount}`); drawSolvedPath(dfsResult.path, COMPARE_DFS_COLOR, 2); pathLenStr += (dfsResult.path.length - 1); cellsExploredStr += dfsResult.visitedCount; } else { console.log(`DFS: No path found, Visited: ${dfsResult.visitedCount}`); pathLenStr += "None"; cellsExploredStr += dfsResult.visitedCount; } updateStatus(selectedAlgorithm, "Comparison Complete", null, null, pathLenStr, cellsExploredStr); showMessage("BFS (Blue) and DFS (Purple) paths shown."); enableActionButtons(true); }, 10); } });
+        // *** Ensure Generate Button calls the correct function ***
+        generateButton.addEventListener('click', () => { if (gaRunning || isAnimating || acoRunning) { gaRunning = false; isAnimating = false; acoRunning = false; if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; } enableActionButtons(false); updateStatus(selectedAlgorithm, "Generating Maze..."); setTimeout(() => { generateRandomMaze(); enableActionButtons(true); if (selectedAlgorithm === 'GA') { initializePopulation(); } if (selectedAlgorithm === 'ACO') { initializePheromones(); } updateStatus(selectedAlgorithm, "Idle - Ready to start"); }, 10); }); // Call generateRandomMaze
+        resetButton.addEventListener('click', () => { gaRunning = false; isAnimating = false; acoRunning = false; if (gaAnimationFrameId) cancelAnimationFrame(gaAnimationFrameId); gaAnimationFrameId = null; if (animationTimerId) clearTimeout(animationTimerId); animationTimerId = null; initializeEmptyMazeGrid(); if (selectedAlgorithm === 'GA') { initializePopulation(); } if (selectedAlgorithm === 'ACO') { initializePheromones(); } drawBaseMaze(); updateStatus(selectedAlgorithm, "Idle - Draw or Generate Maze!", null, null, null); enableActionButtons(true); console.log(`--- MAZE RESET TO EMPTY & ${selectedAlgorithm} RESET ---`); });
+        mutationRateInput.addEventListener('input', (e) => { const rate = e.target.value; mutationRateValueSpan.textContent = `${rate}%`; MUTATION_RATE = parseFloat(rate) / 100.0; });
+        populationSizeInput.addEventListener('change', updatePopulationCap);
+        pheromoneEvaporationInput.addEventListener('input', (e) => { pheromoneEvaporationValueSpan.textContent = parseFloat(e.target.value).toFixed(2); });
+        pheromoneAlphaInput.addEventListener('input', (e) => { pheromoneAlphaValueSpan.textContent = parseFloat(e.target.value).toFixed(1); });
+        heuristicBetaInput.addEventListener('input', (e) => { heuristicBetaValueSpan.textContent = parseFloat(e.target.value).toFixed(1); });
+
+        // --- Initial Setup ---
+        function initializeApp() {
+            initializeEmptyMazeGrid();
+            drawBaseMaze();
+            selectedAlgorithm = 'BFS'; document.getElementById('algoBFS').checked = true;
+            toggleAlgoControls(); // Hide GA/ACO controls initially
+            visualizeCheckbox.disabled = false; visualizeCheckbox.checked = false;
+            speedControlContainer.style.display = 'none';
+            updatePopulationCap(); // Set initial cap state
+            updateStatus(selectedAlgorithm, "Idle - Draw or Generate Maze!", null, null, null);
+            // Set initial display values for sliders
+            mutationRateValueSpan.textContent = `${mutationRateInput.value}%`;
+            speedValueSpan.textContent = speedSlider.value;
+            pheromoneEvaporationValueSpan.textContent = parseFloat(pheromoneEvaporationInput.value).toFixed(2);
+            pheromoneAlphaValueSpan.textContent = parseFloat(pheromoneAlphaInput.value).toFixed(1);
+            heuristicBetaValueSpan.textContent = parseFloat(heuristicBetaInput.value).toFixed(1);
+        }
+
+        initializeApp(); // Initialize the application
+    </script>
+
+</body>
+</html>
