@@ -194,6 +194,52 @@
                 }
             } // End while loop
 
+            // --- START OF ADDED CODE ---
+            // If the END_ROW, END_COL cell was not visited (e.g., due to parity issues),
+            // explicitly carve it open and connect it to the maze.
+            if (!visited[END_ROW][END_COL]) {
+                userMazeGrid[END_ROW][END_COL] = 0; // Carve the end cell itself
+                visited[END_ROW][END_COL] = true;   // Mark as visited
+
+                // Candidates for the wall to carve to connect the end cell.
+                // These are cells adjacent to END_ROW, END_COL.
+                const wallCandidates = [];
+                // Wall above END_ROW, END_COL (e.g., (17,18) for goal (18,18))
+                if (END_ROW > 0) { // Ensure not trying to access row -1
+                    wallCandidates.push({ r: END_ROW - 1, c: END_COL });
+                }
+                // Wall to the left of END_ROW, END_COL (e.g., (18,17) for goal (18,18))
+                if (END_COL > 0) { // Ensure not trying to access col -1
+                    wallCandidates.push({ r: END_ROW, c: END_COL - 1 });
+                }
+                // Wall below END_ROW, END_COL
+                if (END_ROW < ROWS - 1) { // Ensure not trying to access row ROWS
+                     wallCandidates.push({ r: END_ROW + 1, c: END_COL });
+                }
+                // Wall to the right of END_ROW, END_COL
+                if (END_COL < COLS - 1) { // Ensure not trying to access col COLS
+                    wallCandidates.push({ r: END_ROW, c: END_COL + 1 });
+                }
+
+                // Filter for valid walls that are not on the absolute outer perimeter (0 or ROWS-1/COLS-1)
+                // These walls should be actual maze cells that can be turned into paths.
+                const validInternalWalls = wallCandidates.filter(wall =>
+                    wall.r > 0 && wall.r < ROWS - 1 &&
+                    wall.c > 0 && wall.c < COLS - 1
+                );
+
+                if (validInternalWalls.length > 0) {
+                    // Shuffle the valid walls to pick one randomly
+                    validInternalWalls.sort(() => Math.random() - 0.5);
+                    const chosenWallToCarve = validInternalWalls[0];
+                    userMazeGrid[chosenWallToCarve.r][chosenWallToCarve.c] = 0; // Carve the chosen wall
+                    console.log(`Applied parity fix: Carved END_ROW,END_COL (${END_ROW},${END_COL}) and wall (${chosenWallToCarve.r},${chosenWallToCarve.c})`);
+                } else {
+                    console.log("Parity fix: END_ROW,END_COL was not visited, but no valid internal walls found to connect it.");
+                }
+            }
+            // --- END OF ADDED CODE ---
+
             // Finalize Start/End points
             userMazeGrid[START_ROW][START_COL] = 2;
             userMazeGrid[END_ROW][END_COL] = 3;
@@ -201,6 +247,55 @@
             drawBaseMaze();
             updateStatus(selectedAlgorithm, "Random Maze Generated (Backtracker)");
             console.log("Maze generation complete using Recursive Backtracker.");
+
+            // --- START OF VERIFICATION LOGGING ---
+            console.log("--- Verification of Goal Accessibility ---");
+            console.log(`Goal cell (END_ROW, END_COL) is (${END_ROW}, ${END_COL})`);
+            console.log(`Value of goal cell userMazeGrid[${END_ROW}][${END_COL}]: `, userMazeGrid[END_ROW][END_COL]);
+
+            if (END_ROW - 1 > 0) { // Check upper neighbor if not a perimeter
+                console.log(`Value of UP neighbor userMazeGrid[${END_ROW - 1}][${END_COL}]: `, userMazeGrid[END_ROW - 1][END_COL]);
+            }
+            if (END_COL - 1 > 0) { // Check left neighbor if not a perimeter
+                console.log(`Value of LEFT neighbor userMazeGrid[${END_ROW}][${END_COL - 1}]: `, userMazeGrid[END_ROW][END_COL - 1]);
+            }
+            if (END_ROW + 1 < ROWS -1) { // Check lower neighbor if not a perimeter
+                console.log(`Value of DOWN neighbor userMazeGrid[${END_ROW + 1}][${END_COL}]: `, userMazeGrid[END_ROW + 1][END_COL]);
+            }
+            if (END_COL + 1 < COLS -1) { // Check right neighbor if not a perimeter
+                console.log(`Value of RIGHT neighbor userMazeGrid[${END_ROW}][${END_COL + 1}]: `, userMazeGrid[END_ROW][END_COL + 1]);
+            }
+            
+            // Check if at least one of the crucial neighbors is a path (0)
+            let isConnected = false;
+            if (END_ROW - 1 > 0 && userMazeGrid[END_ROW - 1][END_COL] === 0) {
+                isConnected = true;
+            }
+            if (!isConnected && END_COL - 1 > 0 && userMazeGrid[END_ROW][END_COL - 1] === 0) {
+                isConnected = true;
+            }
+            // The fix also potentially opens END_ROW+1 or END_COL+1 if END_ROW/COL was 1.
+            // For (18,18) these are not primary connection points to the (odd,odd) maze.
+            // The code added previously targets (END_ROW-1,COL) or (END_ROW,COL-1) etc.
+
+            if (isConnected) {
+                console.log("VERIFICATION: Goal (18,18) appears to be connected to the maze via a path cell (0).");
+            } else {
+                // Check all valid internal neighbors again based on the actual fix logic
+                const wallCellsToCheck = [];
+                if (END_ROW > 1) wallCellsToCheck.push(userMazeGrid[END_ROW - 1][END_COL]);
+                if (END_COL > 1) wallCellsToCheck.push(userMazeGrid[END_ROW][END_COL - 1]);
+                if (END_ROW < ROWS - 2) wallCellsToCheck.push(userMazeGrid[END_ROW + 1][END_COL]);
+                if (END_COL < COLS - 2) wallCellsToCheck.push(userMazeGrid[END_ROW][END_COL + 1]);
+                
+                if (wallCellsToCheck.some(val => val === 0)) {
+                     console.log("VERIFICATION: Goal (18,18) appears to be connected to the maze via a path cell (0) through one of its direct non-perimeter neighbors.");
+                } else {
+                     console.error("VERIFICATION ERROR: Goal (18,18) does NOT appear to be connected. Check its neighbors' values.");
+                }
+            }
+            console.log("--- End of Verification Logging ---");
+            // --- END OF VERIFICATION LOGGING ---
         } // End generateRandomMaze
 
 
